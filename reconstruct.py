@@ -39,7 +39,7 @@ def read_img_params(filepath):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("model", choices=["Unet", "Resnest"], help="which directory", type=str)
+    parser.add_argument("model", choices=["Unet", "Resnest", 'gt'], help="which directory", type=str)
     parser.add_argument("csv_num", default=1, help="which csv file to reconstruct", type=int)
     args = parser.parse_args()
     

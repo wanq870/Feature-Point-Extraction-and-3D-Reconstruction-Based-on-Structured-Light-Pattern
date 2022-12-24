@@ -14,19 +14,17 @@ from natsort import natsorted
 import argparse
 import glob
 from tqdm import trange
-from pathlib import Path
 import matplotlib.pyplot as plt
-import math
 
 train_tfm = transforms.Compose([
     transforms.ToTensor(),
     transforms.ColorJitter(brightness=0.3),
     transforms.RandomErasing(p=0.5, scale=(0.00125,0.02), ratio=(1,1), value=0),
-    # transforms.Grayscale(1),
+    transforms.Grayscale(1),
 ])
 test_tfm = transforms.Compose([
     transforms.ToTensor(),
-    # transforms.Grayscale(1),
+    transforms.Grayscale(1),
 ])
 
 class U_Dataset(Dataset):
