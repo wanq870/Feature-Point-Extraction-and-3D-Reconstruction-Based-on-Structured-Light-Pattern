@@ -5,9 +5,9 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
+
 import cv2
 import os
-import csv
 import numpy as np
 import pandas as pd
 from natsort import natsorted
@@ -16,16 +16,17 @@ import glob
 from tqdm import trange
 from pathlib import Path
 import matplotlib.pyplot as plt
+import math
 
 train_tfm = transforms.Compose([
     transforms.ToTensor(),
     transforms.ColorJitter(brightness=0.3),
     transforms.RandomErasing(p=0.5, scale=(0.00125,0.02), ratio=(1,1), value=0),
-    transforms.Grayscale(1),
+    # transforms.Grayscale(1),
 ])
 test_tfm = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Grayscale(1),
+    # transforms.Grayscale(1),
 ])
 
 class U_Dataset(Dataset):
@@ -36,7 +37,6 @@ class U_Dataset(Dataset):
     def __getitem__(self, index):
         # open image
         img = cv2.imread(self.input[index])
-        # img = img[720:1232, 720:1232]
 
         # open csv
         df = np.genfromtxt(self.target[index], delimiter=',')
@@ -59,8 +59,9 @@ class U_Dataset(Dataset):
     def __len__(self):
         return len(self.input)
 
+## Unet
 class DoubleConv(nn.Module):
-    """(convolution => [BN] => ReLU) * 2"""
+    # (convolution => [BN] => ReLU) * 2
 
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()
@@ -79,7 +80,7 @@ class DoubleConv(nn.Module):
         return self.double_conv(x)
 
 class Down(nn.Module):
-    """Downscaling with maxpool then double conv"""
+    # Downscaling with maxpool then double conv
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -92,7 +93,7 @@ class Down(nn.Module):
         return self.maxpool_conv(x)
 
 class Up(nn.Module):
-    """Upscaling then double conv"""
+    # Upscaling then double conv
 
     def __init__(self, in_channels, out_channels, bilinear=True):
         super().__init__()
@@ -141,7 +142,7 @@ class UNet(nn.Module):
         self.up3 = (Up(128, 64, bilinear))
         self.outc = (OutConv(64, n_classes))
         self.fc = nn.Sequential(
-            nn.Linear(512*512, 1922),
+            nn.Linear(800*800, 1922),
             nn.ReLU(inplace=True)
         )
 
@@ -158,11 +159,124 @@ class UNet(nn.Module):
         logits = self.fc(x)
         return logits
 
+"""
+## Resnet
+class Bottleneck(nn.Module):
+    # __init__
+    #     in_channel: 残差块输入通道数
+    #     out_channel: 残差块输出通道数
+    #     stride: 卷积步长
+    #     downsample: 在_make_layer函数中赋值, 用于控制shortcut图片下采样 H/2 W/2
+    # expansion = 4   # 残差块第3个卷积层的通道膨胀倍率
+    def __init__(self, in_channel, out_channel, stride=1, downsample=None):
+        super(Bottleneck, self).__init__()
+        
+        self.conv1 = nn.Conv2d(in_channels=in_channel, out_channels=out_channel, kernel_size=1, stride=1, bias=False)   # H,W不变。C: in_channel -> out_channel
+        self.bn1 = nn.BatchNorm2d(num_features=out_channel)
+        self.conv2 = nn.Conv2d(in_channels=out_channel, out_channels=out_channel, kernel_size=3, stride=stride, bias=False, padding=1)  # H/2，W/2。C不变
+        self.bn2 = nn.BatchNorm2d(num_features=out_channel)
+        self.conv3 = nn.Conv2d(in_channels=out_channel, out_channels=out_channel*self.expansion, kernel_size=1, stride=1, bias=False)   # H,W不变。C: out_channel -> 4*out_channel
+        self.bn3 = nn.BatchNorm2d(num_features=out_channel*self.expansion)
+        self.relu = nn.ReLU(inplace=True)
+        
+        self.downsample = downsample
+        
+    def forward(self, x):
+        identity = x    # 将原始输入暂存为shortcut的输出
+        if self.downsample is not None:
+            identity = self.downsample(x)   # 如果需要下采样，那么shortcut后:H/2，W/2。C: out_channel -> 4*out_channel(见ResNet中的downsample实现)
+        
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        
+        out = self.conv2(out)
+        out = self.bn2(out)
+        out = self.relu(out)
+        
+        out = self.conv3(out)
+        out = self.bn3(out)
+        
+        out += identity     # 残差连接
+        out = self.relu(out)
+        
+        return out
+    
+class ResNet(nn.Module):
+    # __init__
+    #     block: 堆叠的基本模块
+    #     block_num: 基本模块堆叠个数,是一个list,对于resnet50=[3,4,6,3]
+    #     num_classes: 全连接之后的分类特征维度
+    # _make_layer
+    #     block: 堆叠的基本模块
+    #     channel: 每个stage中堆叠模块的第一个卷积的卷积核个数, 对resnet50分别是:64,128,256,512
+    #     block_num: 当期stage堆叠block个数
+    #     stride: 默认卷积步长
+    def __init__(self, block, block_num, num_classes=1000):
+        super(ResNet, self).__init__()
+        self.in_channel = 64    # conv1的输出维度
+        
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=self.in_channel, kernel_size=7, stride=2, padding=3, bias=False)     # H/2,W/2。C:3->64
+        self.bn1 = nn.BatchNorm2d(self.in_channel)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)     # H/2,W/2。C不变
+        self.layer1 = self._make_layer(block=block, channel=64, block_num=block_num[0], stride=1)   # H,W不变。downsample控制的shortcut，out_channel=64x4=256
+        self.layer2 = self._make_layer(block=block, channel=128, block_num=block_num[1], stride=2)  # H/2, W/2。downsample控制的shortcut，out_channel=128x4=512
+        self.layer3 = self._make_layer(block=block, channel=256, block_num=block_num[2], stride=2)  # H/2, W/2。downsample控制的shortcut，out_channel=256x4=1024
+        self.layer4 = self._make_layer(block=block, channel=512, block_num=block_num[3], stride=2)  # H/2, W/2。downsample控制的shortcut，out_channel=512x4=2048
+        
+        self.avgpool = nn.AdaptiveAvgPool2d((1,1))  # 将每张特征图大小->(1,1)，则经过池化后的输出维度=通道数
+        self.fc = nn.Linear(in_features=512*block.expansion, out_features=num_classes)
+        
+        for m in self.modules():    # 权重初始化
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                
+    def _make_layer(self, block, channel, block_num, stride=1):
+        downsample = None   # 用于控制shorcut路的
+        if stride != 1 or self.in_channel != channel*block.expansion:   # 对resnet50：conv2中特征图尺寸H,W不需要下采样/2，但是通道数x4，因此shortcut通道数也需要x4。对其余conv3,4,5，既要特征图尺寸H,W/2，又要shortcut维度x4
+            downsample = nn.Sequential(
+                nn.Conv2d(in_channels=self.in_channel, out_channels=channel*block.expansion, kernel_size=1, stride=stride, bias=False), # out_channels决定输出通道数x4，stride决定特征图尺寸H,W/2
+                nn.BatchNorm2d(num_features=channel*block.expansion))
+            
+        layers = []  # 每一个convi_x的结构保存在一个layers列表中，i={2,3,4,5}
+        layers.append(block(in_channel=self.in_channel, out_channel=channel, downsample=downsample, stride=stride)) # 定义convi_x中的第一个残差块，只有第一个需要设置downsample和stride
+        self.in_channel = channel*block.expansion   # 在下一次调用_make_layer函数的时候，self.in_channel已经x4
+        
+        for _ in range(1, block_num):  # 通过循环堆叠其余残差块(堆叠了剩余的block_num-1个)
+            layers.append(block(in_channel=self.in_channel, out_channel=channel))
+            
+        return nn.Sequential(*layers)   # '*'的作用是将list转换为非关键字参数传入
+    
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        
+        return x
+"""
+## Resnest
+from resnest.torch import resnest50
+
+
+
+train_loss_list = []
 def train(model, dataloader, num_epoch, device, criterion, optimizer, save_path):
-    loss_list = []
     best_loss = 9999
+    # cnt = 0
     model.train()
     print(f'Training...')
+    
     for epoch in trange(num_epoch):
         running_loss = 0
         for  i, data in enumerate(dataloader[0]):
@@ -175,27 +289,32 @@ def train(model, dataloader, num_epoch, device, criterion, optimizer, save_path)
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
         train_loss = running_loss / (i+1)
-        loss_list.append(train_loss)
+        train_loss_list.append(train_loss)
+        if (epoch + 1) % 50 == 0:
+            print('Saving loss for plotting learning curve')
+            print(f'epoch : {len(train_loss_list)}')
+            np.save(os.path.join(save_path, 'train_loss.npy'), np.array(train_loss_list, dtype=np.float32), allow_pickle=True)
+            print('Finish saving')
+
+
         print(f'Epoch {epoch}: [Train | avg_loss = {train_loss:.5f}]')
         
         valid_loss = valid(model, dataloader[1], device, criterion)
 
         if valid_loss < best_loss:
             best_loss = valid_loss
+            # cnt = 0
             print("Save Model")
             torch.save(model.state_dict(), os.path.join(save_path, 'model.ckpt'), _use_new_zipfile_serialization=False)
-    
-    figure, axis = plt.subplots()
-    axis.plot(range(1, num_epoch + 1), loss_list)
-    axis.set_title("Learning curve of Loss")
-    axis.set_xlabel("Epoch")
-    axis.set_ylabel("Loss")
-    plt.savefig(os.path.join(save_path, 'img/learning_curve.png'))
+        # else:
+        #     cnt += 1
+        #     if(cnt >= 100):
+        #         print('no improvement, early stop')
+        #         break
 
 def valid(model, dataloader, device, criterion):
     model.eval()
@@ -222,40 +341,66 @@ def valid(model, dataloader, device, criterion):
         print(f"         [Valid | avg_loss = {valid_loss:.5f}]")
     return valid_loss
 
-def test(model, dataloader, device, data_path, save_path):
+def test(model, dataloader, device, criterion, save_csv_dir, save_img_dir, save_plot_dir):
     print(f'Predicting...')
 
-    test_data_paths = natsorted(glob.glob(os.path.join(data_path,'test', 'data', '*.png')))
     model.eval()
-    idx = 0
+    cnt = 1
     with torch.no_grad():
+        running_loss = 0
         for data in dataloader:
             inputs, labels = data
 
             inputs = inputs.float()
+            labels = labels.float()
             inputs = inputs.to(device)
-
+            labels = labels.to(device)
+            
             outputs = model(inputs)
-            outputs = np.reshape(np.array(outputs.cpu()), (-1, 2))
-            img = cv2.imread('3dcv_dataset/test/data/72.png')
-            for idx, corner in enumerate(outputs):
-                df = pd.DataFrame(index=range(961), columns=range(10 * 2))
-                for k in range(961):
-                    df.iloc[k, 0] = outputs[k][0] * 550 / 512 + 740
-                    df.iloc[k, 1] = outputs[k][1] * 550 / 512 + 700
-                df.to_csv(os.path.join(save_path, 'csv/output.csv'))
-                cv2.circle(img, (int(corner[1] * 550 / 512 + 700), int(corner[0] * 550 / 512 + 740)), 3, (0, 0, 255), -1)
-            cv2.imwrite(os.path.join(save_path, 'img/output.png'), img)
+            outputs_arr = np.array(outputs.cpu()).reshape(-1, 2)
+            # save predicted labels and plotted img and points
+            img = output_img(inputs)
+            df = output_label(outputs_arr)
+            df.to_csv(os.path.join(save_csv_dir, str(cnt) + '.csv'))
+            
+            out_img = np.zeros((512, 512))
+            
+            for corner in outputs_arr:
+                out_img[int(corner[0]), int(corner[1])] = 255
+                cv2.circle(img, (int(corner[1]), int(corner[0])), 2, (0, 0, 255), -1)
+            cv2.imwrite(os.path.join(save_img_dir, str(cnt) + '.png'), img)
+            cv2.imwrite(os.path.join(save_plot_dir, str(cnt) + '.png'), out_img)
+            
+            # compute loss
+            loss = criterion(outputs, labels)
+            running_loss += loss.item()
+            print(f'loss of image {cnt}: {loss.item()}')
+            cnt += 1
+            
+def output_img(input):
+    img = input.mul(255).byte()
+    img = img.cpu().numpy().squeeze(0).transpose((1, 2, 0))
+    img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    
+    plt.imshow(img)
+    plt.show()
+    return img
+
+def output_label(input):
+    df = pd.DataFrame(index=range(961), columns=range(10 * 2))
+    for i, corner in enumerate(input):
+        df.iloc[i, 0] = corner[0]
+        df.iloc[i, 1] = corner[1]
+    return df
 
 def main():
     # parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("basedir", help="Base path of train/testing data",
-                    type=str)
-    parser.add_argument("savedir", help="Path to save state dict or predicted csvs",
-                    type=Path)
-    parser.add_argument("--ckpt", help="Path to ckpt file",
-                    type=str)
+    parser.add_argument("basedir", help="Base path of train/testing data", type=str)
+    parser.add_argument("model", choices=['Unet', 'Resnet', 'Resnest'], help='which model architecture to use', type=str)
+    # parser.add_argument("savedir", choose=['Unet_output', 'Resnet_output', 'Transformer_output'], help="Path to save state dict or predicted csvs",
+    #                 type=Path)
+    parser.add_argument("--ckpt", help="Path to ckpt file, eg. output/Unet/model.ckpt", type=str)
     parser.add_argument("--do_predict", help="Do predict",
                     action='store_true')
 
@@ -272,15 +417,30 @@ def main():
     args = parser.parse_args()
 
     data_path = args.basedir
-    save_path = args.savedir
     torch.manual_seed(2022)
     device = torch.device('cuda')
 
-	# Init output directory 
-    output_csv_dir = args.savedir / 'csv'
-    output_img_dir = args.savedir / 'img'
-    output_csv_dir.mkdir(parents=True, exist_ok=True)
-    output_img_dir.mkdir(parents=True, exist_ok=True)
+	# Init output directory
+    """
+    output file structure:
+    [model_name]/output/
+                -label/
+                -img/
+                -input/
+                -model.ckpt
+    """
+    output_dir = args.model
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    output_csv_dir = os.path.join(output_dir, 'csv')
+    if not os.path.exists(output_csv_dir):
+        os.mkdir(output_csv_dir)
+    output_img_dir = os.path.join(output_dir, 'img')
+    if not os.path.exists(output_img_dir):
+        os.mkdir(output_img_dir)
+    output_plot_dir = os.path.join(output_dir, 'input')
+    if not os.path.exists(output_plot_dir):
+        os.mkdir(output_plot_dir)
 
     ### Create dataset
     if not args.do_predict:
@@ -308,7 +468,8 @@ def main():
         print('Done')
     
     # Create model
-    model = UNet()
+    models = {'Unet': UNet(), 'Resnest': resnest50(pretrained=False, dilated=True, num_classes=1922)} # define which model to use
+    model = models[args.model]
     model.to(device)
 
     # Load pretrained model
@@ -319,10 +480,19 @@ def main():
     if not args.do_predict:
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         criterion = nn.SmoothL1Loss()
-        train(model, loaders, args.num_epoch, device, criterion, optimizer, save_path)
-    
+        train(model, loaders, args.num_epoch, device, criterion, optimizer, output_dir)
+        
+        # saving train/valid loss for plotting learning curve
+        print('Saving loss for plotting learning curve')
+        print(f'epoch : {len(train_loss_list)}')
+        np.save(os.path.join(output_dir, 'train_loss.npy'), np.array(train_loss_list, dtype=np.float32), allow_pickle=True)
+        print('Finish saving')
     # Predict
     else:
-        test(model, test_loader, device, data_path, save_path)
+        criterion = nn.SmoothL1Loss()
+        test(model, test_loader, device, criterion, output_csv_dir, output_img_dir, output_plot_dir)
+        
+
+    
 if __name__ == '__main__':
     main()
