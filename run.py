@@ -397,10 +397,10 @@ def main():
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("basedir", help="Base path of train/testing data", type=str)
-    parser.add_argument("model", choices=['Unet', 'Resnet', 'Resnest'], help='which model architecture to use', type=str)
+    parser.add_argument("model", choices=['Unet', 'Resnest'], help='which model architecture to use', type=str)
     # parser.add_argument("savedir", choose=['Unet_output', 'Resnet_output', 'Transformer_output'], help="Path to save state dict or predicted csvs",
     #                 type=Path)
-    parser.add_argument("--ckpt", help="Path to ckpt file, eg. output/Unet/model.ckpt", type=str)
+    parser.add_argument("--ckpt", help="Path to ckpt file, eg. Unet/model.ckpt", type=str)
     parser.add_argument("--do_predict", help="Do predict",
                     action='store_true')
 
@@ -423,11 +423,11 @@ def main():
 	# Init output directory
     """
     output file structure:
-    [model_name]/output/
-                -label/
-                -img/
-                -input/
-                -model.ckpt
+    [model_name]/
+        -label/
+        -img/
+        -input/
+        -model.ckpt
     """
     output_dir = args.model
     if not os.path.exists(output_dir):
