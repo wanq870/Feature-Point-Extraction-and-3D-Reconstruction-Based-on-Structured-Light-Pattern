@@ -15,26 +15,36 @@ import argparse
 import glob
 from tqdm import trange
 import matplotlib.pyplot as plt
+from thop import profile
 
 train_tfm = transforms.Compose([
     transforms.ToTensor(),
     transforms.ColorJitter(brightness=0.3),
     transforms.RandomErasing(p=0.5, scale=(0.00125,0.02), ratio=(1,1), value=0),
-    transforms.Grayscale(1),
+    #transforms.Grayscale(1),
 ])
 test_tfm = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Grayscale(1),
+    # transforms.Grayscale(1),
 ])
 
 class U_Dataset(Dataset):
-    def __init__(self, basepath, train=True):
+    def __init__(self, basepath, train=True, test=False):
         self.input = natsorted(glob.glob(os.path.join(basepath, 'data', '*.png')))
         self.target = natsorted(glob.glob(os.path.join(basepath, 'label', '*.csv')))
         self.train = train
+        self.test = test
     def __getitem__(self, index):
         # open image
         img = cv2.imread(self.input[index])
+        
+        # for testing, only img
+        if self.test:
+            cv2.imshow('', img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            img = test_tfm(img)
+            return img
 
         # open csv
         df = np.genfromtxt(self.target[index], delimiter=',')
@@ -297,12 +307,16 @@ def test(model, dataloader, device, criterion, save_csv_dir, save_img_dir, save_
     with torch.no_grad():
         running_loss = 0
         for data in dataloader:
-            inputs, labels = data
+            inputs = data
 
             inputs = inputs.float()
-            labels = labels.float()
+            # labels = labels.float()
             inputs = inputs.to(device)
-            labels = labels.to(device)
+            # labels = labels.to(device)
+            # if cnt == 1:
+            #     flops, params = profile(model, inputs=(inputs, ))
+            # print(flops)
+            # print(params)
             
             outputs = model(inputs)
             outputs_arr = np.array(outputs.cpu()).reshape(-1, 2)
@@ -320,18 +334,21 @@ def test(model, dataloader, device, criterion, save_csv_dir, save_img_dir, save_
             cv2.imwrite(os.path.join(save_plot_dir, str(cnt) + '.png'), out_img)
             
             # compute loss
-            loss = criterion(outputs, labels)
-            running_loss += loss.item()
-            print(f'loss of image {cnt}: {loss.item()}')
+            # loss = criterion(outputs, labels)
+            # running_loss += loss.item()
+            # print(f'loss of image {cnt}: {loss.item()}')
             cnt += 1
             
 def output_img(input):
     img = input.mul(255).byte()
     img = img.cpu().numpy().squeeze(0).transpose((1, 2, 0))
-    img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    print(img.shape)
+    if img.shape[2] == 1:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
-    plt.imshow(img)
-    plt.show()
+    # plt.imshow(img)
+    # plt.show()
     return img
 
 def output_label(input):
@@ -407,7 +424,7 @@ def main():
         print('Done')
     else:
         print("Creating test dataset...")
-        test_set = U_Dataset(os.path.join(data_path, 'test'), train=False)
+        test_set = U_Dataset(os.path.join(data_path, 'test'), train=False, test=True)
         
         test_loader = DataLoader(
             test_set, batch_size=1, shuffle=False,
