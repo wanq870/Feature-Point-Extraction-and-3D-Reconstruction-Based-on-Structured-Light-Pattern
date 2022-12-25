@@ -13,7 +13,7 @@ img_num: 1~N.png
 1.  Output from the model:
     1.  uncomment the 6 and 7 line in run.sh.
     2.  modify **[model_name]**.
-        1.  model_name: *Unet*, *Resnest* or *gt*
+        1.  model_name: *Unet* or *Resnest*
         2.  **If the model is *Resnest*, comment line 27 in run.py, else uncomment it**
     3. run python3 run.sh.
        1. the predicted feature points are saved as **[image_num]**.csv in order in **[model_name]**/csv/ directory
