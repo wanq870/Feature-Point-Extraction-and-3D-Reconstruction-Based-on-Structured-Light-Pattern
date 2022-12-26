@@ -60,7 +60,7 @@ class U_Dataset(Dataset):
 
 ## Unet
 class DoubleConv(nn.Module):
-    # (convolution => [BN] => ReLU) * 2
+    """(convolution => [BN] => ReLU) * 2"""
 
     def __init__(self, in_channels, out_channels, mid_channels=None):
         super().__init__()
@@ -79,7 +79,7 @@ class DoubleConv(nn.Module):
         return self.double_conv(x)
 
 class Down(nn.Module):
-    # Downscaling with maxpool then double conv
+    """Downscaling with maxpool then double conv"""
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
@@ -92,7 +92,7 @@ class Down(nn.Module):
         return self.maxpool_conv(x)
 
 class Up(nn.Module):
-    # Upscaling then double conv
+    """Upscaling then double conv"""
 
     def __init__(self, in_channels, out_channels, bilinear=True):
         super().__init__()
@@ -141,7 +141,7 @@ class UNet(nn.Module):
         self.up3 = (Up(128, 64, bilinear))
         self.outc = (OutConv(64, n_classes))
         self.fc = nn.Sequential(
-            nn.Linear(800*800, 1922),
+            nn.Linear(512*512, 1922),
             nn.ReLU(inplace=True)
         )
 
