@@ -30,10 +30,6 @@ pip install -r requirements.txt
 bash download.sh
 ```
 
-### Prepare Testing Data
-Put 1.png in 3dcv_dataset/test/data directory.
-
-
 ### Train 
 ```shell
 # Train with default Resnest
@@ -41,6 +37,7 @@ bash train.sh
 ```
 
 ### Test (Predict)
+Please make sure that 1.png is in 3dcv_dataset/test/data directory.
 ```shell
 # Predict with our pretrained model, with default Resnest
 bash test.sh
