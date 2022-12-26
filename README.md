@@ -32,12 +32,11 @@ image 1.png is put in 3dcv_dataset/test/data directory.
     1.  run download.sh
 2.  Output from the model:
     1.  uncomment the 6 and 7 line in run.sh.
-    2.  modify **[model_name]**.
-        1.  model_name: *Unet* or *Resnest*
-        2.  **If the model is *Resnest*, comment line 27 in run.py, else uncomment it**
+    2.  modify **[model_name]** to Unet or Resnest
+        1.  **If the model is *Resnest*, comment line 27 in run.py, else uncomment it**
     3. run python3 run.sh.
-       1. the predicted feature points are saved as 1.csv in **[model_name]**/csv/ directory
-    4. eg. modify run.sh to below
+       1. the predicted feature points are saved as 1.csv in **[model_name]**/csv/
+    4. eg. if the model is Resnest, modify run.sh to below:
     python3 run.py 3dcv_dataset Resnest \
     --num_epoch 3500 \
     --batch_size 8 \

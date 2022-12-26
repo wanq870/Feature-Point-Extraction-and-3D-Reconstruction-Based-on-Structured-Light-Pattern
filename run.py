@@ -25,7 +25,7 @@ train_tfm = transforms.Compose([
 ])
 test_tfm = transforms.Compose([
     transforms.ToTensor(),
-    # transforms.Grayscale(1),
+    #transforms.Grayscale(1),
 ])
 
 class U_Dataset(Dataset):
