@@ -44,7 +44,8 @@ bash test.sh
 ```
 
 ### Change Model
-#### Change Resnest to Unet in *.sh files.
+#### 1. Change Resnest to Unet in *.sh files.
+#### 2. Uncomment line 24 and 28 in run.py.
 
 ### Reconstruction:
 Please make sure that "11_coords.csv", "crop_params.txt" and "calibration_result.xml" are in current working directory.
