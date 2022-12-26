@@ -83,6 +83,14 @@ if __name__ == '__main__':
     # triangulation
     pt_cloud = cv2.triangulatePoints(cam_proj, proj_proj, predict.T, coord_gt.T)
     pt_cloud = cv2.convertPointsFromHomogeneous(pt_cloud.T).reshape(-1,3)
+    
+    remove_list = []
+    for idx, pt_c in enumerate(pt_cloud):
+        if pt_c[2] < -10 or pt_c[2] > 10:
+            remove_list.append(idx)
+    pt_cloud = np.delete(pt_cloud, remove_list, 0)
+
+    x, y, z = pt_cloud[:,0], pt_cloud[:,1], pt_cloud[:,2]
 
     x, y, z = pt_cloud[:,0], pt_cloud[:,1], pt_cloud[:,2]
 
