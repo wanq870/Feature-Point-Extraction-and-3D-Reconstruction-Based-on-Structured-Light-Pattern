@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 ### Download pretrained models
 ```shell
-# Download our pretrained U-net, ResNest models
+# Download our pretrained U-net, ResNeSt models
 bash download.sh
 ```
 
