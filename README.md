@@ -28,7 +28,9 @@ image 1.png is put in 3dcv_dataset/test/data directory.
 
 
 #### How to run
-1.  Output from the model:
+1.  Get the model weights from google drive and unzip the dataset dir
+    1.  run download.sh
+2.  Output from the model:
     1.  uncomment the 6 and 7 line in run.sh.
     2.  modify **[model_name]**.
         1.  model_name: *Unet* or *Resnest*
@@ -44,7 +46,7 @@ image 1.png is put in 3dcv_dataset/test/data directory.
     **--ckpt Resnest/model.ckpt** \
     **--do_predict** \
     and run python3 run.sh. You'll see the output of ResNeSt stored in Resnest directory 
-2. Reconstruction:
+3. Reconstruction:
    1.  make sure "11_coords.csv", "crop_params.txt" and "calibration_result.xml" are in current working directory.
    2.  run python3 reconstruct.py **[model_name]** 1 to see the reconstructed 3D point clouds of 1.png
    3.  eg. run python3 reconstruct.py Resnest 1, You'll see the 3D point cloud of 1.png(if you want to see the ground truth point cloud, run python3 reconstruct.py gt 1)
