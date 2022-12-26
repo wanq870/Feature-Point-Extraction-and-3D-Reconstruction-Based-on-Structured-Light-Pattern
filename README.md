@@ -33,7 +33,7 @@ bash download.sh
 
 ### Train 
 ```shell
-# Train with default Resnest
+# Train with default ResNeSt
 bash train.sh
 ```
 
