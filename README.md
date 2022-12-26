@@ -1,8 +1,26 @@
 ## NTU-3DCV22-Final-Project
 ### National Taiwan University CSIE 3D Computer Vision with Deep Learning Final Project in 2022 Fall
 
+### Environment
+1.  OS: Ubuntu 20.04
+2.  GPU: RTX 2080 Ti / A100
+3.  Python: 3.9.15
+
+### Packages
+1.  torch 1.13.1
+2.  torchvision 0.14.1
+3.  tqdm 4.64.1
+4.  thop 0.1.1.post2209072238
+5.  resnest 0.0.6b20221220
+6.  pandas 1.5.2
+7.  opencv-python 4.6.0.66
+8.  numpy 1.23.5
+9.  natsort 8.2.0
+10. matplotlib 3.6.2
+11. glob2 0.7
+
 #### Models
-Three models: U-net, ResNeSt, ResNet based ground truth
+Three models: U-net, ResNeSt
 
 #### Testing Data
 Many input images **[img_num]**.png are put in 3dcv_dataset/test/data directory.

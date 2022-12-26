@@ -15,7 +15,7 @@ import argparse
 import glob
 from tqdm import trange
 import matplotlib.pyplot as plt
-from thop import profile
+# from thop import profile
 
 train_tfm = transforms.Compose([
     transforms.ToTensor(),
@@ -29,23 +29,14 @@ test_tfm = transforms.Compose([
 ])
 
 class U_Dataset(Dataset):
-    def __init__(self, basepath, train=True, test=False):
+    def __init__(self, basepath, train=True):
         self.input = natsorted(glob.glob(os.path.join(basepath, 'data', '*.png')))
         self.target = natsorted(glob.glob(os.path.join(basepath, 'label', '*.csv')))
         self.train = train
-        self.test = test
     def __getitem__(self, index):
         # open image
         img = cv2.imread(self.input[index])
         
-        # for testing, only img
-        if self.test:
-            cv2.imshow('', img)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            img = test_tfm(img)
-            return img
-
         # open csv
         df = np.genfromtxt(self.target[index], delimiter=',')
         df = df[1:].astype(float)
@@ -167,62 +158,6 @@ class UNet(nn.Module):
         logits = self.fc(x)
         return logits
 
-## Resnet
-class Block0(nn.Module):
-    def __init__(self, ic, oc, ks):
-        super(Block0, self).__init__()
-        self.relu = nn.ReLU(inplace=True)
-        self.path1 = nn.Sequential(
-            nn.Conv2d(ic, oc, 1, bias=False), nn.BatchNorm2d(oc))
-        self.path2 = nn.Sequential(
-            nn.Conv2d(ic, oc, ks, padding=ks//2, bias=False), nn.BatchNorm2d(oc), self.relu,
-            nn.Conv2d(oc, oc, ks, padding=ks//2, bias=False), nn.BatchNorm2d(oc))
-    def forward(self, x):
-        return self.relu(self.path1(x) + self.path2(x))
-
-class Block1(nn.Module):
-    def __init__(self, c, ks):
-        super(Block1, self).__init__()
-        self.relu = nn.ReLU(inplace=True)
-        self.path = nn.Sequential(
-            nn.Conv2d(c, c, ks, padding=ks//2, bias=False), nn.BatchNorm2d(c), self.relu,
-            nn.Conv2d(c, c, ks, padding=ks//2, bias=False), nn.BatchNorm2d(c))
-    def forward(self, x):
-        return self.relu(x + self.path(x))
-
-class Resnet(nn.Module):
-    def __init__(self, num_class=1922, in_ch = 16):
-        super().__init__()
-        d, block_num = 8, 7
-        ds = [1] + [d*2**i for i in range(block_num)]
-        tmp = []
-        for i in range(block_num):
-            tmp.append(Block0(ds[i], ds[i+1], 3))
-            tmp.append(nn.MaxPool2d(3, stride=2, padding=1))
-            tmp.append(Block1(ds[i+1], 3))
-            #tmp.append(Block1(ds[i+1], 3))
-        self.layer = nn.Sequential(*tmp)
-        
-        size = 512 // 2**block_num
-        self.fc = nn.Linear(d*(2**block_num)//2*size*size , num_class)
-        
-    
-    def forward(self, x):
-        x = self.layer(x)
-        
-        x = torch.flatten(x,1)
-        #print(x.size())
-        x = self.fc(x)
-        #x = self.fc3(x)
-        return x
-        
-    def toh(self, model):
-        for child_name, child in model.named_children():
-            if isinstance(child, nn.ReLU):
-                setattr(model, child_name, nn.Softplus())
-            else:
-                self.toh(child)
-
 ## Resnest
 from resnest.torch import resnest50
 
@@ -299,20 +234,19 @@ def valid(model, dataloader, device, criterion):
         print(f"         [Valid | avg_loss = {valid_loss:.5f}]")
     return valid_loss
 
-def test(model, dataloader, device, criterion, save_csv_dir, save_img_dir, save_plot_dir):
+def test(model, dataloader, device, save_csv_dir, save_img_dir, save_plot_dir):
     print(f'Predicting...')
 
     model.eval()
     cnt = 1
     with torch.no_grad():
-        running_loss = 0
         for data in dataloader:
-            inputs = data
+            inputs, labels = data
 
             inputs = inputs.float()
-            # labels = labels.float()
+            labels = labels.float()
             inputs = inputs.to(device)
-            # labels = labels.to(device)
+            ## counting params and flops
             # if cnt == 1:
             #     flops, params = profile(model, inputs=(inputs, ))
             # print(flops)
@@ -320,7 +254,8 @@ def test(model, dataloader, device, criterion, save_csv_dir, save_img_dir, save_
             
             outputs = model(inputs)
             outputs_arr = np.array(outputs.cpu()).reshape(-1, 2)
-            # save predicted labels and plotted img and points
+            labels_arr = np.array(labels).reshape(-1, 2)
+            ## save predicted labels and plotted img and points
             img = output_img(inputs)
             df = output_label(outputs_arr)
             df.to_csv(os.path.join(save_csv_dir, str(cnt) + '.csv'))
@@ -333,16 +268,18 @@ def test(model, dataloader, device, criterion, save_csv_dir, save_img_dir, save_
             cv2.imwrite(os.path.join(save_img_dir, str(cnt) + '.png'), img)
             cv2.imwrite(os.path.join(save_plot_dir, str(cnt) + '.png'), out_img)
             
-            # compute loss
-            # loss = criterion(outputs, labels)
-            # running_loss += loss.item()
-            # print(f'loss of image {cnt}: {loss.item()}')
+            ## compute L2-norm
+            # print(labels_arr.shape)
+            # print(outputs_arr.shape)
+            sum = 0
+            for predict, label in zip(outputs_arr, labels_arr):
+                sum += np.sqrt(np.sum((label - predict)**2))
+            print(f"The L2-norm of data {cnt} is: {sum / len(labels_arr)}")
             cnt += 1
             
 def output_img(input):
     img = input.mul(255).byte()
     img = img.cpu().numpy().squeeze(0).transpose((1, 2, 0))
-    print(img.shape)
     if img.shape[2] == 1:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -362,7 +299,7 @@ def main():
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("basedir", help="Base path of train/testing data", type=str)
-    parser.add_argument("model", choices=['Unet', 'Resnest', 'gt'], help='which model architecture to use', type=str)
+    parser.add_argument("model", choices=['Unet', 'Resnest'], help='which model architecture to use', type=str)
     # parser.add_argument("savedir", choose=['Unet_output', 'Resnet_output', 'Transformer_output'], help="Path to save state dict or predicted csvs",
     #                 type=Path)
     parser.add_argument("--ckpt", help="Path to ckpt file, eg. Unet/model.ckpt", type=str)
@@ -424,7 +361,7 @@ def main():
         print('Done')
     else:
         print("Creating test dataset...")
-        test_set = U_Dataset(os.path.join(data_path, 'test'), train=False, test=True)
+        test_set = U_Dataset(os.path.join(data_path, 'test'), train=False)
         
         test_loader = DataLoader(
             test_set, batch_size=1, shuffle=False,
@@ -433,7 +370,7 @@ def main():
         print('Done')
     
     # Create model
-    models = {'Unet': UNet(), 'Resnest': resnest50(pretrained=False, dilated=True, num_classes=1922), 'gt': Resnet()} # define which model to use
+    models = {'Unet': UNet(), 'Resnest': resnest50(pretrained=False, dilated=True, num_classes=1922)} # define which model to use
     model = models[args.model]
     model.to(device)
 
@@ -455,7 +392,7 @@ def main():
     # Predict
     else:
         criterion = nn.SmoothL1Loss()
-        test(model, test_loader, device, criterion, output_csv_dir, output_img_dir, output_plot_dir)
+        test(model, test_loader, device, output_csv_dir, output_img_dir, output_plot_dir)
         
 
     
