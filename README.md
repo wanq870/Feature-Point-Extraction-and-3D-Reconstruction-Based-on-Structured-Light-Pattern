@@ -18,7 +18,8 @@
 9.  natsort 8.2.0
 10. matplotlib 3.6.2
 11. glob2 0.7
- 
+12. gdown
+
 ### Enviroment
 ```shell
 pip install -r requirements.txt
